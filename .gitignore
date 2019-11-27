@@ -6,6 +6,8 @@
 *.dll
 *.so
 *.dylib
+icinga2-check_backupexec
+check_backupexec
 
 # Test binary, built with `go test -c`
 *.test
