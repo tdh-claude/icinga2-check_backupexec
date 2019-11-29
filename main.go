@@ -91,11 +91,21 @@ func main() {
 	switch params.command {
 	case "get-job":
 		if params.backupDefinition {
-			client.GetBEJobBackupDefinition(params.jobName)
+			jobs := client.GetBEJobBackupDefinition(params.jobName)
+			for key, value := range jobs {
+				if client.Condition(value.JobStatus) == OK_CODE {
+					fmt.Printf("**** Job Ok ****\n")
+				} else {
+					fmt.Printf("**** Job NOT Ok ****\n")
+				}
+				fmt.Printf("Job: %s\n%v\n\n", key, value)
+			}
 		} else {
 			client.GetBEJob(params.jobName)
+			os.Exit(OK_CODE)
 		}
 	case "get-setting":
 		client.GetBEBackupExecSetting()
+		os.Exit(OK_CODE)
 	}
 }
