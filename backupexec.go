@@ -68,9 +68,8 @@ const (
 
 var (
 	OkCondition       = []string{BE_JS_COM, BE_JS_SUC, BE_JS_ACT, BE_JS_RDY, BE_JS_SCH, BE_JS_LIN}
-	WarningCondition  = []string{BE_JS_SUE, BE_JS_ONH, BE_JS_REC, BE_JS_RES, BE_JS_DISA, BE_JS_SUP, BE_JS_RUB}
+	WarningCondition  = []string{BE_JS_SUE, BE_JS_ONH, BE_JS_REC, BE_JS_RES, BE_JS_DISA, BE_JS_SUP, BE_JS_RUB, BE_JS_UNK, BE_JS_DISP, BE_JS_QUE, BE_JS_TBS}
 	CriticalCondition = []string{BE_JS_CAN, BE_JS_ERR, BE_JS_MIS, BE_JS_THA, BE_JS_DIF, BE_JS_INS, BE_JS_INT, BE_JS_NOI}
-	UnknownCondition  = []string{BE_JS_UNK, BE_JS_DISP, BE_JS_QUE, BE_JS_TBS}
 )
 
 // Job Status Record
@@ -97,10 +96,16 @@ type BEJobStatus struct {
 	ErrorMessage          string
 }
 
+// icinga state
+type Icinga struct {
+	StatusCode int
+	Status     string
+	Message    string
+	Metric     string
+}
+
 // BEMCLI Class
 type BEMCLI struct {
-	message   string
-	status    int
 	sshClient *ssh.Client
 }
 
@@ -148,14 +153,10 @@ func (bemcli *BEMCLI) sendCommand(command string) string {
 	return b.String()
 }
 
-// func NewBEMCLI
+// func Init
 // Initialize connection to SSH server
-func (bemcli *BEMCLI) NewBEMCLI(host string, username string, password string, identity string, port int) {
+func (bemcli *BEMCLI) Init(host string, username string, password string, identity string, port int) {
 	var signer ssh.Signer
-
-	// Initialize BEMCLI properties
-	bemcli.message = ""
-	bemcli.status = UNK_CODE
 
 	// replacing tilde char by real home directory
 	home, _ := user.Current()

@@ -31,6 +31,8 @@ var (
 		backupDefinition bool
 		jobName          string
 	}
+
+	icinga Icinga
 )
 
 func init() {
@@ -74,38 +76,89 @@ Options:
 	params.identity, _ = arguments.String("--identity")
 	params.backupDefinition, _ = arguments.Bool("--backup-definition")
 	params.jobName, _ = arguments.String("<job name>")
+
+	// Initialize icinga info
+	icinga.Status = UNK
+	icinga.StatusCode = UNK_CODE
+	icinga.Message = ""
+	icinga.Metric = ""
 }
 
 func main() {
 
-	var client *BEMCLI
+	var bemcli *BEMCLI
 
 	if params.version {
 		fmt.Println("check_backupexec version 1.0.0")
 		os.Exit(OK_CODE)
 	}
 
-	client = new(BEMCLI)
-	client.NewBEMCLI(params.host, params.username, params.password, params.identity, params.port)
+	bemcli = new(BEMCLI)
+	bemcli.Init(params.host, params.username, params.password, params.identity, params.port)
 
 	switch params.command {
 	case "get-job":
 		if params.backupDefinition {
-			jobs := client.GetBEJobBackupDefinition(params.jobName)
-			for key, value := range jobs {
-				if client.Condition(value.JobStatus) == OK_CODE {
-					fmt.Printf("**** Job Ok ****\n")
-				} else {
-					fmt.Printf("**** Job NOT Ok ****\n")
+			jobs := bemcli.GetBEJobBackupDefinition(params.jobName)
+			for jobName, job := range jobs {
+				switch bemcli.Condition(job.JobStatus) {
+				case OK_CODE:
+					if icinga.StatusCode == UNK_CODE {
+						icinga.StatusCode = OK_CODE
+						icinga.Status = OK
+					}
+					if icinga.Message != "" {
+						icinga.Message += "/"
+					}
+					icinga.Message += jobName + " " + job.JobStatus
+				case WAR_CODE:
+					if icinga.StatusCode == UNK_CODE || icinga.StatusCode < WAR_CODE {
+						icinga.StatusCode = WAR_CODE
+						icinga.Status = WAR
+					}
+					if icinga.Message != "" {
+						icinga.Message += "/"
+					}
+					icinga.Message += jobName + " " + job.JobStatus
+				case CRI_CODE:
+					if icinga.StatusCode == UNK_CODE || icinga.StatusCode < CRI_CODE {
+						icinga.StatusCode = CRI_CODE
+						icinga.Status = CRI
+					}
+					if icinga.Message != "" {
+						icinga.Message = jobName + " " + job.JobStatus + "/" + icinga.Message
+					} else {
+						icinga.Message = jobName + " " + job.JobStatus
+					}
+				default:
+					if job.IsActive {
+						if icinga.StatusCode == UNK_CODE {
+							icinga.StatusCode = OK_CODE
+							icinga.Status = OK
+						}
+					} else {
+						if icinga.StatusCode == UNK_CODE || icinga.StatusCode < WAR_CODE {
+							icinga.StatusCode = WAR_CODE
+							icinga.Status = WAR
+						}
+					}
+					if icinga.Message != "" {
+						icinga.Message += "/"
+					}
+					icinga.Message += jobName + " " + job.Status + "-" + job.SubStatus
 				}
-				fmt.Printf("Job: %s\n%v\n\n", key, value)
 			}
+			if icinga.Metric != "" {
+				icinga.Metric = " | " + icinga.Metric
+			}
+			fmt.Printf("%s: %s%s\n", icinga.Status, icinga.Message, icinga.Metric)
+			os.Exit(icinga.StatusCode)
 		} else {
-			client.GetBEJob(params.jobName)
+			bemcli.GetBEJob(params.jobName)
 			os.Exit(OK_CODE)
 		}
 	case "get-setting":
-		client.GetBEBackupExecSetting()
+		bemcli.GetBEBackupExecSetting()
 		os.Exit(OK_CODE)
 	}
 }
