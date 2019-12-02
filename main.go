@@ -89,7 +89,7 @@ func main() {
 	var bemcli *BEMCLI
 
 	if params.version {
-		fmt.Println("check_backupexec version 1.0.0")
+		fmt.Println("check_backupexec version 1.0.1")
 		os.Exit(OK_CODE)
 	}
 
@@ -126,9 +126,9 @@ func main() {
 						icinga.Status = CRI
 					}
 					if icinga.Message != "" {
-						icinga.Message = jobName + " " + job.JobStatus + "/" + icinga.Message
+						icinga.Message = jobName + " " + job.JobStatus + " [" + job.ErrorMessage + "]/" + icinga.Message
 					} else {
-						icinga.Message = jobName + " " + job.JobStatus
+						icinga.Message = jobName + " " + job.JobStatus + " [" + job.ErrorMessage + "]"
 					}
 				default:
 					if job.IsActive {

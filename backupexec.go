@@ -18,7 +18,6 @@ import (
 	"os/user"
 	"regexp"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -211,8 +210,7 @@ func (bemcli *BEMCLI) GetBEJob(jobName string) {
 func (bemcli *BEMCLI) GetBEJobBackupDefinition(backupDefinition string) map[string]BEJobStatus {
 
 	// Definition of Regex to parse Data
-	reJob := regexp.MustCompile(`(?m)^Name[\s]*:\s(.*)\r\n(?:(?:JobType[\s]*:\s(.*))\r\n|(?:TaskType[\s]*:\s(.*))\r\n|(?:TaskName[\s]*:\s(.*))\r\n|(?:IsActive[\s]*:\s(.*))\r\n|(?:Status[\s]*:\s(.*))\r\n|(?:SubStatus[\s]*:\s(.*))\r\n|(?:SelectionSummary[\s]*:\s(.*))\r\n|(?:Schedule[\s]*:\s([^I]*))\r\n|(?:Storage[\s]*:\s(.*))\r\n|(?:IsBackupDefinitionJob[\s]*:\s(.*))\r\n|(?:JobHistory[\s]*:\s@{([^}]*)))*`)
-	reHistory := regexp.MustCompile(`(?m)([\w]+)=([^;]*)?`)
+	reJob := regexp.MustCompile(`(?m)^\sName\s:\s(.*?)\sJobType\s:\s(.*?)\sTaskType\s:\s(.*?)\sTaskName\s:\s(.*?)\sIsActive\s:\s(.*?)\sStatus\s:\s(.*?)\sSubStatus\s:\s(.*?)\sSelectionSummary\s:\s(.*?)\sStorage\s:\s(.*?)\sSchedule\s:\s(.*?)\sIsBackupDefinitionJob\s:\s(.*?)\sJobHistory\s:\s@{JobStatus=(.*?);\sStartTime=(.*?);\sEndTime=(.*?);\sPercentComplete=(.*?);\sTotalDataSizeBytes=(.*?);\sJobRateMBPerMinute=(.*?);\sErrorCategory=(.*?);\sErrorCode=(.*?);\sErrorMessage=(.*?)}`)
 	reBlank := regexp.MustCompile(`(?m)[\s]{2,}`)
 	reNewLine := regexp.MustCompile(`(?m)[\r|\n]+`)
 
@@ -227,6 +225,10 @@ func (bemcli *BEMCLI) GetBEJobBackupDefinition(backupDefinition string) map[stri
 
 	// sending PowerShell Command and get result
 	data := bemcli.sendCommand(beCommand)
+	data = reBlank.ReplaceAllString(data, " ")
+	data = reNewLine.ReplaceAllString(data, "")
+
+	//fmt.Printf("%s\n", data)
 
 	// Parsing content of returned data
 	match := reJob.FindAllStringSubmatch(data, -1)
@@ -241,38 +243,18 @@ func (bemcli *BEMCLI) GetBEJobBackupDefinition(backupDefinition string) map[stri
 		js.Status = m[6]
 		js.SubStatus = m[7]
 		js.SelectionSummary = m[8]
-
-		schedule := reBlank.ReplaceAllString(m[9], " ")
-		schedule = reNewLine.ReplaceAllString(schedule, "")
-		js.Schedule = schedule
-
-		js.Storage = m[10]
+		js.Storage = m[9]
+		js.Schedule = m[10]
 		js.IsBackupDefinitionJob, _ = strconv.ParseBool(m[11])
-		history := reBlank.ReplaceAllString(m[12], " ")
-		history = reNewLine.ReplaceAllString(history, "")
-
-		for _, h := range reHistory.FindAllStringSubmatch(history, -1) {
-			switch strings.ToLower(h[1]) {
-			case "jobstatus":
-				js.JobStatus = h[2]
-			case "starttime":
-				js.StartTime, _ = time.Parse(BE_US_TIME_FORMAT, h[2])
-			case "endtime":
-				js.EndTime, _ = time.Parse(BE_US_TIME_FORMAT, h[2])
-			case "percentcomplete":
-				js.PercentComplete, _ = strconv.Atoi(h[2])
-			case "totaldatasizebytes":
-				js.TotalDataSizeBytes, _ = strconv.ParseInt(h[2], 10, 64)
-			case "jobratembperminute":
-				js.JobRateMBPerMinute, _ = strconv.ParseFloat(h[2], 64)
-			case "errorcategory":
-				js.ErrorCategory, _ = strconv.Atoi(h[2])
-			case "errorcode":
-				js.ErrorCode, _ = strconv.Atoi(h[2])
-			case "errormessage":
-				js.ErrorMessage = h[2]
-			}
-		}
+		js.JobStatus = m[12]
+		js.StartTime, _ = time.Parse(BE_US_TIME_FORMAT, m[13])
+		js.EndTime, _ = time.Parse(BE_US_TIME_FORMAT, m[14])
+		js.PercentComplete, _ = strconv.Atoi(m[15])
+		js.TotalDataSizeBytes, _ = strconv.ParseInt(m[16], 10, 64)
+		js.JobRateMBPerMinute, _ = strconv.ParseFloat(m[17], 64)
+		js.ErrorCategory, _ = strconv.Atoi(m[18])
+		js.ErrorCode, _ = strconv.Atoi(m[19])
+		js.ErrorMessage = m[20]
 		beJobStatus[m[1]] = js
 	}
 
