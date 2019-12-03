@@ -29,6 +29,7 @@ var (
 		password         string
 		identity         string
 		version          bool
+		verbose          bool
 		backupDefinition bool
 		jobName          string
 	}
@@ -37,15 +38,21 @@ var (
 )
 
 func init() {
+	// Don't parse command line argument for testing
+	if os.Getenv("TEST") == "TEST" {
+		return
+	}
+
 	usage := `check_backupexec
 Check Backup Exec Jobs 
 Usage: 
 	check_backupexec (-h | --help | --version)
-	check_backupexec get-job (-H <host> | --host=<host> -u <username> | --username=<username>) [-p <password> | --password=<password> | -i <pkey_file> | --identity=<pkey_file] [-P <port> | --port=<port>] [--backup-definition | -D] <job name> 
+	check_backupexec get-job (-H <host> | --host=<host> -u <username> | --username=<username>) [-p <password> | --password=<password> | -i <pkey_file> | --identity=<pkey_file] [-P <port> | --port=<port>] [-v | --verbose] [--backup-definition | -D] <job name> 
 	check_backupexec get-setting (-H <host> | --host=<host> -u <username> | --username=<username>) [-p <password> | --password=<password> | -i <pkey_file> | --identity=<pkey_file] [-P <port> | --port=<port>] 
 Options:
 	--version  				Show check_cattools version.
 	-h --help  				Show this screen.
+	-v --verbose  		Display verbose output
 	-H <host> --host=<host>  		Backup Exec server hostname or IP Address
 	-u <username> --username=<username>  	Username
 	-p <password> --password=<password>  	Password
@@ -77,6 +84,7 @@ Options:
 	params.identity, _ = arguments.String("--identity")
 	params.backupDefinition, _ = arguments.Bool("--backup-definition")
 	params.jobName, _ = arguments.String("<job name>")
+	params.verbose, _ = arguments.Bool("--verbose")
 
 	// Initialize icinga info
 	icinga.Status = UNK
@@ -100,63 +108,9 @@ func main() {
 	switch params.command {
 	case "get-job":
 		if params.backupDefinition {
-			jobs := bemcli.GetBEJobBackupDefinition(params.jobName)
-			for jobName, job := range jobs {
-				switch bemcli.Condition(job.JobStatus) {
-				case OK_CODE:
-					if job.EndTime.Unix() > icinga.NewestLog.Unix() { //icinga.StatusCode == UNK_CODE || job.EndTime.Unix() > icinga.NewestLog.Unix() {
-						icinga.StatusCode = OK_CODE
-						icinga.Status = OK
-						icinga.NewestLog = job.EndTime
-					}
-					if icinga.Message != "" {
-						icinga.Message += "/"
-					}
-					icinga.Message += jobName + " " + job.JobStatus
-				case WAR_CODE:
-					if job.EndTime.Unix() > icinga.NewestLog.Unix() { //icinga.StatusCode == UNK_CODE || icinga.StatusCode < WAR_CODE  || job.EndTime.Unix() > icinga.NewestLog.Unix() {
-						icinga.StatusCode = WAR_CODE
-						icinga.Status = WAR
-						icinga.NewestLog = job.EndTime
-					}
-					if icinga.Message != "" {
-						icinga.Message += "/"
-					}
-					icinga.Message += jobName + " " + job.JobStatus
-				case CRI_CODE:
-					if job.EndTime.Unix() > icinga.NewestLog.Unix() {
-						icinga.StatusCode = CRI_CODE
-						icinga.Status = CRI
-						icinga.NewestLog = job.EndTime
-					}
-					if icinga.Message != "" {
-						icinga.Message = jobName + " " + job.JobStatus + " [" + job.ErrorMessage + "]/" + icinga.Message
-					} else {
-						icinga.Message = jobName + " " + job.JobStatus + " [" + job.ErrorMessage + "]"
-					}
-				default:
-					if job.IsActive {
-						if icinga.StatusCode == UNK_CODE {
-							icinga.StatusCode = OK_CODE
-							icinga.Status = OK
-						}
-					} else {
-						if icinga.StatusCode == UNK_CODE || icinga.StatusCode < WAR_CODE {
-							icinga.StatusCode = WAR_CODE
-							icinga.Status = WAR
-						}
-					}
-					if icinga.Message != "" {
-						icinga.Message += "/"
-					}
-					icinga.Message += jobName + " " + job.Status + "-" + job.SubStatus
-				}
-			}
-			if icinga.Metric != "" {
-				icinga.Metric = " | " + icinga.Metric
-			}
-			fmt.Printf("%s: Last Run '%v' %s%s\n", icinga.Status, icinga.NewestLog.Format("02/01/2006 15:04:05"), icinga.Message, icinga.Metric)
-			os.Exit(icinga.StatusCode)
+			s, c := bemcli.BEJobsStatusToIcingaStatus(bemcli.GetBEJobBackupDefinition(params.jobName), params.verbose)
+			fmt.Printf(s)
+			os.Exit(c)
 		} else {
 			bemcli.GetBEJob(params.jobName)
 			os.Exit(OK_CODE)

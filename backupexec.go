@@ -106,7 +106,8 @@ type Icinga struct {
 
 // BEMCLI Class
 type BEMCLI struct {
-	sshClient *ssh.Client
+	sshClient   *ssh.Client
+	beJobStatus map[string]BEJobStatus
 }
 
 func valInArray(val string, array []string) bool {
@@ -197,6 +198,13 @@ func (bemcli *BEMCLI) Init(host string, username string, password string, identi
 
 }
 
+// func GetBEBackupExecSetting
+// Get Server settings
+func (bemcli *BEMCLI) GetBEBackupExecSetting() {
+	beCommand := fmt.Sprintf("Import-Module BEMCLI; %s", "Get-BEBackupExecSetting")
+	fmt.Printf("OK %v\n", bemcli.sendCommand(beCommand))
+}
+
 // func GetBEJob
 // Get information about job
 func (bemcli *BEMCLI) GetBEJob(jobName string) {
@@ -208,15 +216,10 @@ func (bemcli *BEMCLI) GetBEJob(jobName string) {
 
 // func GetBEJobBackupDefinition
 // Get Detailed information for all job corresponding to a BackupDefinition and return a map (by jobname) of status
-func (bemcli *BEMCLI) GetBEJobBackupDefinition(backupDefinition string) map[string]BEJobStatus {
-
-	// Definition of Regex to parse Data
-	reJob := regexp.MustCompile(`(?m)\s?Name\s:\s(.*?)\s?JobType\s:\s(.*?)\s?TaskType\s:\s(.*?)\s?TaskName\s:\s(.*?)\s?IsActive\s:\s(.*?)\s?Status\s:\s(.*?)\s?SubStatus\s:\s(.*?)\s?SelectionSummary\s:\s(.*?)\s?Storage\s:\s(.*?)\s?Schedule\s:\s(.*?)\s?IsBackupDefinitionJob\s:\s(.*?)\s?JobHistory\s:\s@{JobStatus=(.*?);\s?StartTime=(.*?);\s?EndTime=(.*?);\s?PercentComplete=(.*?);\s?TotalDataSizeBytes=(.*?);\s?JobRateMBPerMinute=(.*?);\s?ErrorCategory=(.*?);\s?ErrorCode=(.*?);\s?ErrorMessage=(.*?)}`)
+func (bemcli *BEMCLI) GetBEJobBackupDefinition(backupDefinition string) string {
+	// Regex to clean received from ssh session
 	reBlank := regexp.MustCompile(`(?m)[\s]{2,}`)
 	reNewLine := regexp.MustCompile(`(?m)[\r|\n]+`)
-
-	// Initialize empty maps for return BEJobStatus
-	beJobStatus := make(map[string]BEJobStatus)
 
 	// Building PowerShell Command
 	selectObject := `Name, JobType, TaskType, TaskName, IsActive, Status, SubStatus, SelectionSummary, Storage, Schedule, IsBackupDefinitionJob,
@@ -228,10 +231,22 @@ func (bemcli *BEMCLI) GetBEJobBackupDefinition(backupDefinition string) map[stri
 	data := bemcli.sendCommand(beCommand)
 	data = reBlank.ReplaceAllString(data, " ")
 	data = reNewLine.ReplaceAllString(data, "")
+	return data
+}
 
-	//fmt.Printf("%s\n", data)
+func (bemcli *BEMCLI) BEJobsStatusToIcingaStatus(data string, verbose bool) (string, int) {
+	// Definition of Regex to parse Data
+	reJob := regexp.MustCompile(`(?m)\s?Name\s:\s(.*?)\s?JobType\s:\s(.*?)\s?TaskType\s:\s(.*?)\s?TaskName\s:\s(.*?)\s?IsActive\s:\s(.*?)\s?Status\s:\s(.*?)\s?SubStatus\s:\s(.*?)\s?SelectionSummary\s:\s(.*?)\s?Storage\s:\s(.*?)\s?Schedule\s:\s(.*?)\s?IsBackupDefinitionJob\s:\s(.*?)\s?JobHistory\s:\s@{JobStatus=(.*?);\s?StartTime=(.*?);\s?EndTime=(.*?);\s?PercentComplete=(.*?);\s?TotalDataSizeBytes=(.*?);\s?JobRateMBPerMinute=(.*?);\s?ErrorCategory=(.*?);\s?ErrorCode=(.*?);\s?ErrorMessage=(.*?)}`)
 
-	// Parsing content of returned data
+	// Initialize empty maps for return BEJobStatus
+	beJobStatus := make(map[string]BEJobStatus)
+	if verbose {
+		fmt.Println("+-------------------------------------")
+		fmt.Printf("%s\n", data)
+		fmt.Println("+-------------------------------------")
+	}
+
+	// Building structure
 	match := reJob.FindAllStringSubmatch(data, -1)
 
 	for _, m := range match {
@@ -258,13 +273,62 @@ func (bemcli *BEMCLI) GetBEJobBackupDefinition(backupDefinition string) map[stri
 		js.ErrorMessage = m[20]
 		beJobStatus[m[1]] = js
 	}
+	bemcli.beJobStatus = beJobStatus
 
-	return beJobStatus
-}
+	for jobName, job := range beJobStatus {
+		switch bemcli.Condition(job.JobStatus) {
+		case OK_CODE:
+			if job.EndTime.Unix() > icinga.NewestLog.Unix() { //icinga.StatusCode == UNK_CODE || job.EndTime.Unix() > icinga.NewestLog.Unix() {
+				icinga.StatusCode = OK_CODE
+				icinga.Status = OK
+				icinga.NewestLog = job.EndTime
+			}
+			if icinga.Message != "" {
+				icinga.Message += "/"
+			}
+			icinga.Message += jobName + " " + job.JobStatus
+		case WAR_CODE:
+			if job.EndTime.Unix() > icinga.NewestLog.Unix() { //icinga.StatusCode == UNK_CODE || icinga.StatusCode < WAR_CODE  || job.EndTime.Unix() > icinga.NewestLog.Unix() {
+				icinga.StatusCode = WAR_CODE
+				icinga.Status = WAR
+				icinga.NewestLog = job.EndTime
+			}
+			if icinga.Message != "" {
+				icinga.Message += "/"
+			}
+			icinga.Message += jobName + " " + job.JobStatus
+		case CRI_CODE:
+			if job.EndTime.Unix() > icinga.NewestLog.Unix() {
+				icinga.StatusCode = CRI_CODE
+				icinga.Status = CRI
+				icinga.NewestLog = job.EndTime
+			}
+			if icinga.Message != "" {
+				icinga.Message = jobName + " " + job.JobStatus + " [" + job.ErrorMessage + "]/" + icinga.Message
+			} else {
+				icinga.Message = jobName + " " + job.JobStatus + " [" + job.ErrorMessage + "]"
+			}
+		default:
+			if job.IsActive {
+				if icinga.StatusCode == UNK_CODE {
+					icinga.StatusCode = OK_CODE
+					icinga.Status = OK
+				}
+			} else {
+				if icinga.StatusCode == UNK_CODE || icinga.StatusCode < WAR_CODE {
+					icinga.StatusCode = WAR_CODE
+					icinga.Status = WAR
+				}
+			}
+			if icinga.Message != "" {
+				icinga.Message += "/"
+			}
+			icinga.Message += jobName + " " + job.Status + "-" + job.SubStatus
+		}
+	}
+	if icinga.Metric != "" {
+		icinga.Metric = " | " + icinga.Metric
+	}
+	return fmt.Sprintf("%s: Last Run '%v' %s%s\n", icinga.Status, icinga.NewestLog.Format("02/01/2006 15:04:05"), icinga.Message, icinga.Metric), icinga.StatusCode
 
-// func GetBEBackupExecSetting
-// Get Server settings
-func (bemcli *BEMCLI) GetBEBackupExecSetting() {
-	beCommand := fmt.Sprintf("Import-Module BEMCLI; %s", "Get-BEBackupExecSetting")
-	fmt.Printf("OK %v\n", bemcli.sendCommand(beCommand))
 }
