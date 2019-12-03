@@ -17,8 +17,9 @@ import (
 )
 
 var (
-	arguments docopt.Opts
-	err       error
+	arguments  docopt.Opts
+	err        error
+	buildcount string
 
 	params struct {
 		command          string
@@ -89,7 +90,7 @@ func main() {
 	var bemcli *BEMCLI
 
 	if params.version {
-		fmt.Println("check_backupexec version 1.0.1")
+		fmt.Printf("check_backupexec version 1.0.2-build %s\n", buildcount)
 		os.Exit(OK_CODE)
 	}
 
@@ -103,27 +104,30 @@ func main() {
 			for jobName, job := range jobs {
 				switch bemcli.Condition(job.JobStatus) {
 				case OK_CODE:
-					if icinga.StatusCode == UNK_CODE {
+					if job.EndTime.Unix() > icinga.NewestLog.Unix() { //icinga.StatusCode == UNK_CODE || job.EndTime.Unix() > icinga.NewestLog.Unix() {
 						icinga.StatusCode = OK_CODE
 						icinga.Status = OK
+						icinga.NewestLog = job.EndTime
 					}
 					if icinga.Message != "" {
 						icinga.Message += "/"
 					}
 					icinga.Message += jobName + " " + job.JobStatus
 				case WAR_CODE:
-					if icinga.StatusCode == UNK_CODE || icinga.StatusCode < WAR_CODE {
+					if job.EndTime.Unix() > icinga.NewestLog.Unix() { //icinga.StatusCode == UNK_CODE || icinga.StatusCode < WAR_CODE  || job.EndTime.Unix() > icinga.NewestLog.Unix() {
 						icinga.StatusCode = WAR_CODE
 						icinga.Status = WAR
+						icinga.NewestLog = job.EndTime
 					}
 					if icinga.Message != "" {
 						icinga.Message += "/"
 					}
 					icinga.Message += jobName + " " + job.JobStatus
 				case CRI_CODE:
-					if icinga.StatusCode == UNK_CODE || icinga.StatusCode < CRI_CODE {
+					if job.EndTime.Unix() > icinga.NewestLog.Unix() {
 						icinga.StatusCode = CRI_CODE
 						icinga.Status = CRI
+						icinga.NewestLog = job.EndTime
 					}
 					if icinga.Message != "" {
 						icinga.Message = jobName + " " + job.JobStatus + " [" + job.ErrorMessage + "]/" + icinga.Message
@@ -151,7 +155,7 @@ func main() {
 			if icinga.Metric != "" {
 				icinga.Metric = " | " + icinga.Metric
 			}
-			fmt.Printf("%s: %s%s\n", icinga.Status, icinga.Message, icinga.Metric)
+			fmt.Printf("%s: Last Run '%v' %s%s\n", icinga.Status, icinga.NewestLog.Format("02/01/2006 15:04:05"), icinga.Message, icinga.Metric)
 			os.Exit(icinga.StatusCode)
 		} else {
 			bemcli.GetBEJob(params.jobName)

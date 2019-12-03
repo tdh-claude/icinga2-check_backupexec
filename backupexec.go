@@ -37,7 +37,7 @@ const (
 
 	// BackupExec JobStatus
 	BE_JS_UNK  = "Unknown"
-	BE_JS_CAN  = "Cancel"
+	BE_JS_CAN  = "Canceled"
 	BE_JS_COM  = "Completed"
 	BE_JS_SUE  = "SucceededWithExceptions"
 	BE_JS_ONH  = "OnHold"
@@ -101,6 +101,7 @@ type Icinga struct {
 	Status     string
 	Message    string
 	Metric     string
+	NewestLog  time.Time
 }
 
 // BEMCLI Class
@@ -210,7 +211,7 @@ func (bemcli *BEMCLI) GetBEJob(jobName string) {
 func (bemcli *BEMCLI) GetBEJobBackupDefinition(backupDefinition string) map[string]BEJobStatus {
 
 	// Definition of Regex to parse Data
-	reJob := regexp.MustCompile(`(?m)^\sName\s:\s(.*?)\sJobType\s:\s(.*?)\sTaskType\s:\s(.*?)\sTaskName\s:\s(.*?)\sIsActive\s:\s(.*?)\sStatus\s:\s(.*?)\sSubStatus\s:\s(.*?)\sSelectionSummary\s:\s(.*?)\sStorage\s:\s(.*?)\sSchedule\s:\s(.*?)\sIsBackupDefinitionJob\s:\s(.*?)\sJobHistory\s:\s@{JobStatus=(.*?);\sStartTime=(.*?);\sEndTime=(.*?);\sPercentComplete=(.*?);\sTotalDataSizeBytes=(.*?);\sJobRateMBPerMinute=(.*?);\sErrorCategory=(.*?);\sErrorCode=(.*?);\sErrorMessage=(.*?)}`)
+	reJob := regexp.MustCompile(`(?m)\s?Name\s:\s(.*?)\s?JobType\s:\s(.*?)\s?TaskType\s:\s(.*?)\s?TaskName\s:\s(.*?)\s?IsActive\s:\s(.*?)\s?Status\s:\s(.*?)\s?SubStatus\s:\s(.*?)\s?SelectionSummary\s:\s(.*?)\s?Storage\s:\s(.*?)\s?Schedule\s:\s(.*?)\s?IsBackupDefinitionJob\s:\s(.*?)\s?JobHistory\s:\s@{JobStatus=(.*?);\s?StartTime=(.*?);\s?EndTime=(.*?);\s?PercentComplete=(.*?);\s?TotalDataSizeBytes=(.*?);\s?JobRateMBPerMinute=(.*?);\s?ErrorCategory=(.*?);\s?ErrorCode=(.*?);\s?ErrorMessage=(.*?)}`)
 	reBlank := regexp.MustCompile(`(?m)[\s]{2,}`)
 	reNewLine := regexp.MustCompile(`(?m)[\r|\n]+`)
 
