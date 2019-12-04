@@ -5,6 +5,17 @@ import (
 	"testing"
 )
 
+// For testing, following environment variable must be defined
+// CHECK_MODE=TEST
+// VERSION=False
+// PORT=22
+// USERNAME={username}
+// BACKUPDEFINITION=True
+// JOBNAME={jobname}
+// VERBOSE=false
+// COMMAND=get-job
+// HOST={hostname}
+
 func TestMain(m *testing.M) {
 	exitCode := m.Run()
 	os.Exit(exitCode)

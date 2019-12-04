@@ -176,6 +176,7 @@ func (bemcli *BEMCLI) Init(host string, username string, password string, identi
 		signer = nil
 	}
 
+	// Configure authentication methods
 	var auths []ssh.AuthMethod
 	if signer != nil {
 		auths = append(auths, ssh.PublicKeys(signer))
@@ -187,9 +188,10 @@ func (bemcli *BEMCLI) Init(host string, username string, password string, identi
 	config := &ssh.ClientConfig{
 		User:            username,
 		Auth:            auths,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // No key validation in known host
 	}
 
+	// Connecting SSH Server (Backup Exec Server)
 	bemcli.sshClient, err = ssh.Dial("tcp", fmt.Sprintf("%s:%d", host, port), config)
 	if err != nil {
 		fmt.Printf("%s Error connecting SSH server: %s\n", CRI, err)
@@ -234,6 +236,8 @@ func (bemcli *BEMCLI) GetBEJobBackupDefinition(backupDefinition string) string {
 	return data
 }
 
+// fuc BEJobStatusToIcingaStatus
+// Geneation of a Icinga/Nagios status string
 func (bemcli *BEMCLI) BEJobsStatusToIcingaStatus(data string, verbose bool) (string, int) {
 	// Definition of Regex to parse Data
 	reJob := regexp.MustCompile(`(?m)\s?Name\s:\s(.*?)\s?JobType\s:\s(.*?)\s?TaskType\s:\s(.*?)\s?TaskName\s:\s(.*?)\s?IsActive\s:\s(.*?)\s?Status\s:\s(.*?)\s?SubStatus\s:\s(.*?)\s?SelectionSummary\s:\s(.*?)\s?Storage\s:\s(.*?)\s?Schedule\s:\s(.*?)\s?IsBackupDefinitionJob\s:\s(.*?)\s?JobHistory\s:\s@{JobStatus=(.*?);\s?StartTime=(.*?);\s?EndTime=(.*?);\s?PercentComplete=(.*?);\s?TotalDataSizeBytes=(.*?);\s?JobRateMBPerMinute=(.*?);\s?ErrorCategory=(.*?);\s?ErrorCode=(.*?);\s?ErrorMessage=(.*?)}`)
@@ -241,9 +245,9 @@ func (bemcli *BEMCLI) BEJobsStatusToIcingaStatus(data string, verbose bool) (str
 	// Initialize empty maps for return BEJobStatus
 	beJobStatus := make(map[string]BEJobStatus)
 	if verbose {
-		fmt.Println("+-------------------------------------")
+		fmt.Println("-------------------------------------")
 		fmt.Printf("%s\n", data)
-		fmt.Println("+-------------------------------------")
+		fmt.Println("-------------------------------------")
 	}
 
 	// Building structure
@@ -278,7 +282,7 @@ func (bemcli *BEMCLI) BEJobsStatusToIcingaStatus(data string, verbose bool) (str
 	for jobName, job := range beJobStatus {
 		switch bemcli.Condition(job.JobStatus) {
 		case OK_CODE:
-			if job.EndTime.Unix() > icinga.NewestLog.Unix() { //icinga.StatusCode == UNK_CODE || job.EndTime.Unix() > icinga.NewestLog.Unix() {
+			if job.EndTime.Unix() > icinga.NewestLog.Unix() {
 				icinga.StatusCode = OK_CODE
 				icinga.Status = OK
 				icinga.NewestLog = job.EndTime
@@ -288,7 +292,7 @@ func (bemcli *BEMCLI) BEJobsStatusToIcingaStatus(data string, verbose bool) (str
 			}
 			icinga.Message += jobName + " " + job.JobStatus
 		case WAR_CODE:
-			if job.EndTime.Unix() > icinga.NewestLog.Unix() { //icinga.StatusCode == UNK_CODE || icinga.StatusCode < WAR_CODE  || job.EndTime.Unix() > icinga.NewestLog.Unix() {
+			if job.EndTime.Unix() > icinga.NewestLog.Unix() {
 				icinga.StatusCode = WAR_CODE
 				icinga.Status = WAR
 				icinga.NewestLog = job.EndTime
