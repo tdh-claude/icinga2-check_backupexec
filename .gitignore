@@ -8,7 +8,7 @@
 *.dylib
 icinga2-check_backupexec
 check_backupexec
-
+icinga2-check_backupexec.test
 
 # Test binary, built with `go test -c`
 *.test
@@ -22,3 +22,4 @@ vendor/
 
 .idea/.gitignore
 go.sum
+

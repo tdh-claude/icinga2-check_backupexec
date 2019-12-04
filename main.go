@@ -14,12 +14,14 @@ import (
 	"fmt"
 	"github.com/docopt/docopt-go"
 	"os"
+	"strconv"
 )
 
 var (
 	arguments  docopt.Opts
 	err        error
 	buildcount string
+	usage      string
 
 	params struct {
 		command          string
@@ -38,12 +40,15 @@ var (
 )
 
 func init() {
-	// Don't parse command line argument for testing
-	if os.Getenv("TEST") == "TEST" {
-		return
-	}
 
-	usage := `check_backupexec
+	// Initialize icinga info
+	icinga.Status = UNK
+	icinga.StatusCode = UNK_CODE
+	icinga.Message = ""
+	icinga.Metric = ""
+
+	// Defining help and check_backupexec usage information
+	usage = `check_backupexec
 Check Backup Exec Jobs 
 Usage: 
 	check_backupexec (-h | --help | --version)
@@ -62,35 +67,47 @@ Options:
 	<job name>				Name of backup exec Job
 `
 
-	arguments, err = docopt.ParseDoc(usage)
-	if err != nil {
-		fmt.Printf("%s Error parsing command line arguments: %v", UNK, err)
-		os.Exit(UNK_CODE)
+	// Don't parse command line argument for testing
+	if os.Getenv("CHECK_MODE") == "TEST" {
+		params.version, _ = strconv.ParseBool(os.Getenv("VERSION"))
+		params.port, _ = strconv.Atoi(os.Getenv("PORT"))
+		params.host = os.Getenv("HOST")
+		params.username = os.Getenv("USERNAME")
+		params.password = os.Getenv("PASSWORD")
+		params.identity = os.Getenv("IDENTITY")
+		if params.identity == "" {
+			params.identity = "~/.ssh/id_rsa"
+		}
+		params.backupDefinition, _ = strconv.ParseBool(os.Getenv("BACKUPDEFINITION"))
+		params.jobName = os.Getenv("JOBNAME")
+		params.verbose, _ = strconv.ParseBool(os.Getenv("VERBOSE"))
+		params.command = os.Getenv("COMMAND")
+	} else {
+		arguments, err = docopt.ParseDoc(usage)
+		if err != nil {
+			fmt.Printf("%s Error parsing command line arguments: %v", UNK, err)
+			os.Exit(UNK_CODE)
+		}
+
+		if c, _ := arguments.Bool("get-setting"); c {
+			params.command = "get-setting"
+		}
+
+		if c, _ := arguments.Bool("get-job"); c {
+			params.command = "get-job"
+		}
+
+		params.version, _ = arguments.Bool("--version")
+		params.port, _ = arguments.Int("--port")
+		params.host, _ = arguments.String("--host")
+		params.username, _ = arguments.String("--username")
+		params.password, _ = arguments.String("--password")
+		params.identity, _ = arguments.String("--identity")
+		params.backupDefinition, _ = arguments.Bool("--backup-definition")
+		params.jobName, _ = arguments.String("<job name>")
+		params.verbose, _ = arguments.Bool("--verbose")
 	}
 
-	if c, _ := arguments.Bool("get-setting"); c {
-		params.command = "get-setting"
-	}
-
-	if c, _ := arguments.Bool("get-job"); c {
-		params.command = "get-job"
-	}
-
-	params.version, _ = arguments.Bool("--version")
-	params.port, _ = arguments.Int("--port")
-	params.host, _ = arguments.String("--host")
-	params.username, _ = arguments.String("--username")
-	params.password, _ = arguments.String("--password")
-	params.identity, _ = arguments.String("--identity")
-	params.backupDefinition, _ = arguments.Bool("--backup-definition")
-	params.jobName, _ = arguments.String("<job name>")
-	params.verbose, _ = arguments.Bool("--verbose")
-
-	// Initialize icinga info
-	icinga.Status = UNK
-	icinga.StatusCode = UNK_CODE
-	icinga.Message = ""
-	icinga.Metric = ""
 }
 
 func main() {
@@ -118,5 +135,10 @@ func main() {
 	case "get-setting":
 		bemcli.GetBEBackupExecSetting()
 		os.Exit(OK_CODE)
+	default:
+		fmt.Printf("check_backupexec version 1.0.2-build %s\n", buildcount)
+		fmt.Printf("Unknown command\n")
+		fmt.Printf("Usage: %s", usage)
+		os.Exit(CRI_CODE)
 	}
 }
