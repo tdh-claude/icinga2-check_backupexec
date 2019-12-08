@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"testing"
 )
@@ -17,6 +18,7 @@ import (
 // HOST={hostname}
 
 func TestMain(m *testing.M) {
+	fmt.Printf("PATH: %s", os.Getenv("PATH"))
 	exitCode := m.Run()
 	os.Exit(exitCode)
 }
