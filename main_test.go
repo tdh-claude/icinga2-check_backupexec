@@ -112,6 +112,25 @@ func TestBEMCLI_BEJobsStatusToIcingaStatus5(t *testing.T) {
 
 }
 
+//
+func TestBEMCLI_BEJobsStatusToIcingaStatus6(t *testing.T) {
+	//
+	bemcli := new(BEMCLI)
+
+	data := ` Name : TDHDYN03-Full Weekend JobType : Backup TaskType : Full TaskName : Full Weekend IsActive : False Status : Scheduled SubStatus : Ok SelectionSummary : Fully selected Storage : Deduplication Storage 001 Schedule : Friday every 1 week(s) at 7:00 PM effective on 11/29/2018. IsBackupDefinitionJob : True JobHistory : @{JobStatus=Error; StartTime=12/6/2019 7:09:24 PM; EndTime=12/6/2019 8:08:56 PM; PercentComplete=0; TotalDataSizeBytes=166074429246; JobRateMBPerMinute=3380.233; ErrorCategory=1; ErrorCode=1; ErrorMessage=} Name : TDHDYN03-Full Monthly JobType : Backup TaskType : Full TaskName : Full Monthly IsActive : False Status : Scheduled SubStatus : Ok SelectionSummary : Fully selected Storage : Deduplication Storage 001 Schedule : Friday every 1 week(s) at 7:00 PM effective on 11/29/2018. IsBackupDefinitionJob : True JobHistory : Name : TDHDYN03-Duplicate Weekend JobType : Duplicate TaskType : Duplicate TaskName : Duplicate Weekend IsActive : False Status : Linked SubStatus : Ok SelectionSummary : Fully selected Storage : Any tape cartridge storage Schedule : IsBackupDefinitionJob : True JobHistory : @{JobStatus=Succeeded; StartTime=12/6/2019 9:50:59 PM; EndTime=12/6/2019 10:05:56 PM; PercentComplete=100; TotalDataSizeBytes=147089565793; JobRateMBPerMinute=12006.22; ErrorCategory=0; ErrorCode=0; ErrorMessage=} Name : TDHDYN03-Duplicate Monthly JobType : Duplicate TaskType : Duplicate TaskName : Duplicate Monthly IsActive : False Status : Linked SubStatus : Ok SelectionSummary : Fully selected Storage : Any tape cartridge storage Schedule : IsBackupDefinitionJob : True JobHistory : `
+	result, cond := bemcli.BEJobsStatusToIcingaStatus(data, params.verbose)
+	if params.verbose {
+		t.Logf("%s", result)
+	}
+	if cond != OK_CODE {
+		t.Errorf("Error testing BEJobsStatusToIcingaStatus incorrect code %d, want 0\nResult string is %s", cond, result)
+	}
+	if len(bemcli.beJobStatus) != 4 {
+		t.Errorf("Number of jobs incorrect %d, want 1", len(bemcli.beJobStatus))
+	}
+
+}
+
 func TestBEMCLI_Init(t *testing.T) {
 	bemcli := new(BEMCLI)
 	bemcli.Init(params.host, params.username, params.password, params.identity, params.port)

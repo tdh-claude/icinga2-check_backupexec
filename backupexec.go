@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/user"
 	"regexp"
+	"sort"
 	"strconv"
 	"time"
 )
@@ -108,7 +109,7 @@ type Icinga struct {
 // BEMCLI Class
 type BEMCLI struct {
 	sshClient   *ssh.Client
-	beJobStatus map[string]BEJobStatus
+	beJobStatus []BEJobStatus
 }
 
 // Helper function who return true if occurrence of value exist in array
@@ -253,8 +254,9 @@ func (bemcli *BEMCLI) BEJobsStatusToIcingaStatus(data string, verbose bool) (str
 	icinga.Message = ""
 	icinga.Metric = ""
 
-	// Initialize empty maps for return BEJobStatus
-	beJobStatus := make(map[string]BEJobStatus)
+	// Initialize empty slice for return BEJobStatus
+	var beJobStatus []BEJobStatus
+
 	// If verbose mode is enable displaying RAW Data
 	if verbose {
 		fmt.Println("-------------------------------------")
@@ -287,63 +289,48 @@ func (bemcli *BEMCLI) BEJobsStatusToIcingaStatus(data string, verbose bool) (str
 		js.ErrorCategory, _ = strconv.Atoi(m[18])
 		js.ErrorCode, _ = strconv.Atoi(m[19])
 		js.ErrorMessage = m[20]
-		beJobStatus[m[1]] = js
+		beJobStatus = append(beJobStatus, js)
 	}
+
+	// Sorting slice by descending job StartTime (most recent job is first)
+	sort.Slice(beJobStatus, func(i, j int) bool {
+		return beJobStatus[i].StartTime.Unix() > beJobStatus[j].StartTime.Unix()
+	})
 	bemcli.beJobStatus = beJobStatus
 
 	// Checking jobs status to build Icinga response
-	for jobName, job := range beJobStatus {
-		switch bemcli.Condition(job.JobStatus) {
-		case OK_CODE:
-			if job.EndTime.Unix() > icinga.NewestLog.Unix() {
+	for idx, job := range bemcli.beJobStatus {
+		msgAdd := ""
+		// First jobStatus give general ICINGA status
+		if idx == 0 {
+			icinga.NewestLog = job.StartTime
+			switch bemcli.Condition(job.JobStatus) {
+			case OK_CODE:
 				icinga.StatusCode = OK_CODE
 				icinga.Status = OK
-				icinga.NewestLog = job.EndTime
-			}
-			if icinga.Message != "" {
-				icinga.Message += "/"
-			}
-			icinga.Message += jobName + " " + job.JobStatus
-		case WAR_CODE:
-			if job.EndTime.Unix() > icinga.NewestLog.Unix() {
+			case WAR_CODE:
 				icinga.StatusCode = WAR_CODE
 				icinga.Status = WAR
-				icinga.NewestLog = job.EndTime
-			}
-			if icinga.Message != "" {
-				icinga.Message += "/"
-			}
-			icinga.Message += jobName + " " + job.JobStatus
-		case CRI_CODE:
-			if job.EndTime.Unix() > icinga.NewestLog.Unix() {
+			case CRI_CODE:
 				icinga.StatusCode = CRI_CODE
 				icinga.Status = CRI
-				icinga.NewestLog = job.EndTime
-			}
-			if icinga.Message != "" {
-				icinga.Message = jobName + " " + job.JobStatus + " [" + job.ErrorMessage + "]/" + icinga.Message
-			} else {
-				icinga.Message = jobName + " " + job.JobStatus + " [" + job.ErrorMessage + "]"
-			}
-		default:
-			msgAdd := ""
-			if job.IsActive {
-				if icinga.StatusCode == UNK_CODE {
+				msgAdd = " [" + job.ErrorMessage + "]"
+			default:
+				if job.IsActive {
 					icinga.StatusCode = OK_CODE
 					icinga.Status = OK
 					msgAdd = " [Job is Running]"
-				}
-			} else {
-				if icinga.StatusCode == UNK_CODE || icinga.StatusCode < WAR_CODE {
-					icinga.StatusCode = WAR_CODE
-					icinga.Status = WAR
+				} else {
+					icinga.StatusCode = UNK_CODE
+					icinga.Status = UNK
 				}
 			}
-			if icinga.Message != "" {
-				icinga.Message += "/"
-			}
-			icinga.Message += jobName + " " + job.Status + "-" + job.SubStatus + msgAdd
 		}
+		if icinga.Message != "" {
+			icinga.Message += "/"
+		}
+		icinga.Message += job.Name + " " + job.Status + "-" + job.SubStatus + msgAdd
+
 	}
 	if icinga.Metric != "" {
 		icinga.Metric = " | " + icinga.Metric
