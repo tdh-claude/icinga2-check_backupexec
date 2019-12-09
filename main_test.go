@@ -16,6 +16,8 @@ import (
 // VERBOSE=false
 // COMMAND=get-job
 // HOST={hostname}
+// PASSWORD=[password]
+// IDENTITY=[ssh private key file]
 
 func TestMain(m *testing.M) {
 	fmt.Printf("PATH: %s", os.Getenv("PATH"))

@@ -75,7 +75,7 @@ Options:
 		params.username = os.Getenv("USERNAME")
 		params.password = os.Getenv("PASSWORD")
 		params.identity = os.Getenv("IDENTITY")
-		if params.identity == "" {
+		if params.identity == "" && params.password == "" {
 			params.identity = "~/.ssh/id_rsa"
 		}
 		params.backupDefinition, _ = strconv.ParseBool(os.Getenv("BACKUPDEFINITION"))
