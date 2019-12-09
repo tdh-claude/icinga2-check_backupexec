@@ -65,6 +65,7 @@ const (
 	// BackupExec JobType
 )
 
+// Backup Exec JobStatus - Level of return text status
 var (
 	OkCondition       = []string{BE_JS_COM, BE_JS_SUE, BE_JS_SUC, BE_JS_ACT, BE_JS_RDY, BE_JS_SCH, BE_JS_LIN}
 	WarningCondition  = []string{BE_JS_ONH, BE_JS_REC, BE_JS_RES, BE_JS_DISA, BE_JS_SUP, BE_JS_RUB, BE_JS_UNK, BE_JS_DISP, BE_JS_QUE, BE_JS_TBS}
@@ -110,6 +111,7 @@ type BEMCLI struct {
 	beJobStatus map[string]BEJobStatus
 }
 
+// Helper function who return true if occurrence of value exist in array
 func valInArray(val string, array []string) bool {
 	for _, value := range array {
 		if val == value {
@@ -119,6 +121,7 @@ func valInArray(val string, array []string) bool {
 	return false
 }
 
+// Return level of BackupExec status
 func (bemcli *BEMCLI) Condition(val string) int {
 	if valInArray(val, OkCondition) {
 		return OK_CODE
@@ -240,17 +243,26 @@ func (bemcli *BEMCLI) GetBEJobBackupDefinition(backupDefinition string) string {
 // Geneation of a Icinga/Nagios status string
 func (bemcli *BEMCLI) BEJobsStatusToIcingaStatus(data string, verbose bool) (string, int) {
 	// Definition of Regex to parse Data
-	reJob := regexp.MustCompile(`(?m)\s?Name\s:\s(.*?)\s?JobType\s:\s(.*?)\s?TaskType\s:\s(.*?)\s?TaskName\s:\s(.*?)\s?IsActive\s:\s(.*?)\s?Status\s:\s(.*?)\s?SubStatus\s:\s(.*?)\s?SelectionSummary\s:\s(.*?)\s?Storage\s:\s(.*?)\s?Schedule\s:\s(.*?)\s?IsBackupDefinitionJob\s:\s(.*?)\s?JobHistory\s:\s@{JobStatus=(.*?);\s?StartTime=(.*?);\s?EndTime=(.*?);\s?PercentComplete=(.*?);\s?TotalDataSizeBytes=(.*?);\s?JobRateMBPerMinute=(.*?);\s?ErrorCategory=(.*?);\s?ErrorCode=(.*?);\s?ErrorMessage=(.*?)}`)
+	reJob := regexp.MustCompile(`(?m)\s?Name\s:\s(.*?)\s?JobType\s:\s(.*?)\s?TaskType\s:\s(.*?)\s?TaskName\s:\s(.*?)\s?IsActive\s:\s(.*?)\s?Status\s:\s(.*?)\s?SubStatus\s:\s(.*?)\s?SelectionSummary\s:\s(.*?)\s?Storage\s:\s(.*?)\s?Schedule\s:\s(.*?)\s?IsBackupDefinitionJob\s:\s(.*?)\s?JobHistory\s:\s(?:@{JobStatus=(.*?);\s?StartTime=(.*?);\s?EndTime=(.*?);\s?PercentComplete=(.*?);\s?TotalDataSizeBytes=(.*?);\s?JobRateMBPerMinute=(.*?);\s?ErrorCategory=(.*?);\s?ErrorCode=(.*?);\s?ErrorMessage=(.*?)})?`)
+
+	var icinga Icinga
+
+	// Initialize icinga info
+	icinga.Status = UNK
+	icinga.StatusCode = UNK_CODE
+	icinga.Message = ""
+	icinga.Metric = ""
 
 	// Initialize empty maps for return BEJobStatus
 	beJobStatus := make(map[string]BEJobStatus)
+	// If verbose mode is enable displaying RAW Data
 	if verbose {
 		fmt.Println("-------------------------------------")
 		fmt.Printf("%s\n", data)
 		fmt.Println("-------------------------------------")
 	}
 
-	// Building structure
+	// Building structure from RAW Data
 	match := reJob.FindAllStringSubmatch(data, -1)
 
 	for _, m := range match {
@@ -279,6 +291,7 @@ func (bemcli *BEMCLI) BEJobsStatusToIcingaStatus(data string, verbose bool) (str
 	}
 	bemcli.beJobStatus = beJobStatus
 
+	// Checking jobs status to build Icinga response
 	for jobName, job := range beJobStatus {
 		switch bemcli.Condition(job.JobStatus) {
 		case OK_CODE:
@@ -313,10 +326,12 @@ func (bemcli *BEMCLI) BEJobsStatusToIcingaStatus(data string, verbose bool) (str
 				icinga.Message = jobName + " " + job.JobStatus + " [" + job.ErrorMessage + "]"
 			}
 		default:
+			msgAdd := ""
 			if job.IsActive {
 				if icinga.StatusCode == UNK_CODE {
 					icinga.StatusCode = OK_CODE
 					icinga.Status = OK
+					msgAdd = " [Job is Running]"
 				}
 			} else {
 				if icinga.StatusCode == UNK_CODE || icinga.StatusCode < WAR_CODE {
@@ -327,12 +342,14 @@ func (bemcli *BEMCLI) BEJobsStatusToIcingaStatus(data string, verbose bool) (str
 			if icinga.Message != "" {
 				icinga.Message += "/"
 			}
-			icinga.Message += jobName + " " + job.Status + "-" + job.SubStatus
+			icinga.Message += jobName + " " + job.Status + "-" + job.SubStatus + msgAdd
 		}
 	}
 	if icinga.Metric != "" {
 		icinga.Metric = " | " + icinga.Metric
 	}
+
+	// Returning Icinga monitoring formatted status
 	return fmt.Sprintf("%s: Last Run '%v' %s%s\n", icinga.Status, icinga.NewestLog.Format("02/01/2006 15:04:05"), icinga.Message, icinga.Metric), icinga.StatusCode
 
 }

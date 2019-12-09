@@ -35,18 +35,9 @@ var (
 		backupDefinition bool
 		jobName          string
 	}
-
-	icinga Icinga
 )
 
 func init() {
-
-	// Initialize icinga info
-	icinga.Status = UNK
-	icinga.StatusCode = UNK_CODE
-	icinga.Message = ""
-	icinga.Metric = ""
-
 	// Defining help and check_backupexec usage information
 	usage = `check_backupexec
 Check Backup Exec Jobs 
@@ -67,7 +58,7 @@ Options:
 	<job name>				Name of backup exec Job
 `
 
-	// Don't parse command line argument for testing
+	// Don't parse command line argument for testing argument must be passed with OS environment variable
 	if os.Getenv("CHECK_MODE") == "TEST" {
 		params.version, _ = strconv.ParseBool(os.Getenv("VERSION"))
 		params.port, _ = strconv.Atoi(os.Getenv("PORT"))
@@ -114,15 +105,19 @@ func main() {
 
 	var bemcli *BEMCLI
 
+	// Display version and buildnumber of check_backupexec
 	if params.version {
 		fmt.Printf("check_backupexec version 1.0.2-build %s\n", buildcount)
 		os.Exit(OK_CODE)
 	}
 
+	// Creating and initializing BackupExec Module session to BackupExec Server
 	bemcli = new(BEMCLI)
 	bemcli.Init(params.host, params.username, params.password, params.identity, params.port)
 
+	// Executing defined command
 	switch params.command {
+	// Getting job status
 	case "get-job":
 		if params.backupDefinition {
 			s, c := bemcli.BEJobsStatusToIcingaStatus(bemcli.GetBEJobBackupDefinition(params.jobName), params.verbose)
@@ -132,9 +127,11 @@ func main() {
 			bemcli.GetBEJob(params.jobName)
 			os.Exit(OK_CODE)
 		}
+	// Getting server setting if communication to server is Ok return OK_CODE
 	case "get-setting":
 		bemcli.GetBEBackupExecSetting()
 		os.Exit(OK_CODE)
+	// If command is not handled return CRI_CODE
 	default:
 		fmt.Printf("check_backupexec version 1.0.2-build %s\n", buildcount)
 		fmt.Printf("Unknown command\n")
