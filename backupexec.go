@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -149,7 +150,7 @@ func (bemcli *BEMCLI) sendCommand(command string) string {
 	}
 	defer session.Close()
 
-	session.WindowChange(1000, 1000)
+	_ = session.WindowChange(1000, 1000)
 	session.Stdout = &b
 	if err := session.Run(command); err != nil {
 		fmt.Printf("%s Failed to run command: %s\n", CRI, err)
@@ -326,10 +327,30 @@ func (bemcli *BEMCLI) BEJobsStatusToIcingaStatus(data string, verbose bool) (str
 				}
 			}
 		}
+		switch bemcli.Condition(job.JobStatus) {
+		case CRI_CODE:
+			msgAdd = "[" + job.ErrorMessage + "]"
+		default:
+			if job.IsActive {
+				icinga.StatusCode = OK_CODE
+				icinga.Status = OK
+				msgAdd = "[Job is Running]"
+			}
+		}
+
 		if icinga.Message != "" {
 			icinga.Message += "/"
 		}
-		icinga.Message += job.Name + " " + job.Status + "-" + job.SubStatus + msgAdd
+		icinga.Message += job.Name + " " + job.Status
+		if strings.ToLower(job.SubStatus) != "ok" {
+			icinga.Message += "-" + job.SubStatus
+		}
+		if job.JobStatus != "" {
+			icinga.Message += "-" + job.JobStatus
+		}
+		if msgAdd != "" {
+			icinga.Message += " " + msgAdd
+		}
 
 	}
 	if icinga.Metric != "" {
